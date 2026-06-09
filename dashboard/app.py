@@ -183,50 +183,58 @@ if "Prédiction Individuelle" in tab_map:
         if model_data:
             col1, col2 = st.columns(2)
             with col1:
-                p_age = st.number_input("Âge", 20, 90, 55)
-                p_gender = st.selectbox("Genre", [0, 1], format_func=lambda x: "Homme" if x == 1 else "Femme")
-                p_sysbp = st.number_input("Tension systolique (mmHg)", 80, 250, 130)
-                p_diabp = st.number_input("Tension diastolique (mmHg)", 40, 150, 85)
+                p_age = st.number_input("Âge", 20, 90, 55, key="pred_age")
+                p_gender = st.selectbox("Genre", [0, 1], format_func=lambda x: "Homme" if x == 1 else "Femme", key="pred_gender")
+                p_sysbp = st.number_input("Tension systolique (mmHg)", 80, 250, 130, key="pred_sysbp")
+                p_diabp = st.number_input("Tension diastolique (mmHg)", 40, 150, 85, key="pred_diabp")
 
             with col2:
-                p_chol = st.number_input("Cholestérol", 1, 600, 200)
-                p_glucose = st.number_input("Glucose", 1, 400, 80)
-                p_smoker = st.selectbox("Fumeur", [0, 1], format_func=lambda x: "Oui" if x == 1 else "Non")
+                p_chol = st.selectbox("Cholestérol", [1, 2, 3],
+                                      format_func=lambda x: {1: "Normal", 2: "Élevé", 3: "Très élevé"}[x], key="pred_chol")
+                p_glucose = st.selectbox("Glucose", [1, 2, 3],
+                                         format_func=lambda x: {1: "Normal", 2: "Élevé", 3: "Très élevé"}[x], key="pred_glucose")
+                p_smoker = st.selectbox("Fumeur", [0, 1], format_func=lambda x: "Oui" if x == 1 else "Non", key="pred_smoker")
 
-            if st.button("Predire le risque", type="primary"):
-                features = model_data['feature_names']
-                input_data = pd.DataFrame([[0]*len(features)], columns=features)
-                for col, val in [('age', p_age), ('gender', p_gender), ('sysBP', p_sysbp),
-                                ('diaBP', p_diabp), ('cholesterol', p_chol), ('glucose', p_glucose),
-                                ('currentSmoker', p_smoker)]:
-                    if col in input_data.columns:
-                        input_data[col] = val
-                if 'bp_ratio' in input_data.columns:
-                    input_data['bp_ratio'] = p_sysbp / max(p_diabp, 1)
-                if 'pulse_pressure' in input_data.columns:
-                    input_data['pulse_pressure'] = p_sysbp - p_diabp
+            # Prédiction automatique à chaque changement
+            features = model_data['feature_names']
+            input_data = pd.DataFrame([[0]*len(features)], columns=features)
+            for col, val in [('age', p_age), ('gender', p_gender), ('sysBP', p_sysbp),
+                            ('diaBP', p_diabp), ('cholesterol', p_chol), ('glucose', p_glucose),
+                            ('currentSmoker', p_smoker)]:
+                if col in input_data.columns:
+                    input_data[col] = val
+            if 'bp_ratio' in input_data.columns:
+                input_data['bp_ratio'] = p_sysbp / max(p_diabp, 1)
+            if 'pulse_pressure' in input_data.columns:
+                input_data['pulse_pressure'] = p_sysbp - p_diabp
 
-                X_scaled = model_data['scaler'].transform(input_data)
-                proba = model_data['model'].predict_proba(X_scaled)[0][1]
+            X_scaled = model_data['scaler'].transform(input_data)
+            proba = model_data['model'].predict_proba(X_scaled)[0][1]
 
-                st.markdown("---")
-                col_r1, col_r2 = st.columns(2)
-                with col_r1:
-                    color = "ELEVE" if proba >= 0.6 else "MODERE" if proba >= 0.3 else "FAIBLE"
-                    st.metric("Score de Risque", f"{proba:.1%}", f"Risque {color}")
-                with col_r2:
-                    fig = go.Figure(go.Indicator(
-                        mode="gauge+number", value=proba*100,
-                        title={'text': "Risque (%)"},
-                        gauge={'axis': {'range': [0, 100]},
-                               'bar': {'color': "red" if proba >= 0.6 else "orange" if proba >= 0.3 else "green"},
-                               'steps': [{'range': [0, 30], 'color': "lightgreen"},
-                                        {'range': [30, 60], 'color': "lightyellow"},
-                                        {'range': [60, 100], 'color': "lightsalmon"}]}
-                    ))
-                    st.plotly_chart(fig, use_container_width=True)
+            st.markdown("---")
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                if proba >= 0.6:
+                    color_label, emoji = "ÉLEVÉ", "🔴"
+                elif proba >= 0.3:
+                    color_label, emoji = "MODÉRÉ", "🟠"
+                else:
+                    color_label, emoji = "FAIBLE", "🟢"
+                st.metric("Score de Risque", f"{proba:.1%}", f"{emoji} Risque {color_label}")
+            with col_r2:
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number", value=proba*100,
+                    title={'text': "Risque (%)"},
+                    gauge={'axis': {'range': [0, 100]},
+                           'bar': {'color': "#e63946" if proba >= 0.6 else "#f4a261" if proba >= 0.3 else "#2a9d8f"},
+                           'steps': [{'range': [0, 30], 'color': "#d8f3dc"},
+                                    {'range': [30, 60], 'color': "#fff3cd"},
+                                    {'range': [60, 100], 'color': "#f8d7da"}]}
+                ))
+                fig.update_layout(height=250)
+                st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Exécutez le notebook pour générer best_model.pkl")
+            st.warning("⚙️ Exécutez le notebook pour générer best_model.pkl")
 
 # === VUE 4 : Feature importance SHAP ===
 if "SHAP Importance" in tab_map:
